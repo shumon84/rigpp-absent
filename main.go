@@ -12,24 +12,43 @@ import (
 	"time"
 )
 
+// 与えられた日付から見てもっとも近い次の活動日を返す
+func GetNextActivityDate(date time.Time) time.Time {
+	NextActivityDateDuration := []int{2, 1, 0, 2, 1, 0, 3}
+	return date.AddDate(0, 0, NextActivityDateDuration[date.Weekday()])
+}
+
 // タイムスタンプを日付に変換
-func ParseTimestamp(timestamp string) (string, error) {
+func TimestampToDateTime(timestamp string) (time.Time, error) {
 	timeStrings := strings.Split(timestamp, ".")
-	unixTime, err := strconv.Atoi(timeStrings[0])
+	second, err := strconv.Atoi(timeStrings[0])
+	if err != nil {
+		return time.Time{}, err
+	}
+	nanoSecond, err := strconv.Atoi(timeStrings[1])
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(int64(second), int64(nanoSecond)), nil
+}
+
+// 次の活動日を返す
+func TimestampToDateString(timestamp string) (string, error) {
+	dateTime, err := TimestampToDateTime(timestamp)
 	if err != nil {
 		return "", err
 	}
-	datetime := time.Unix(int64(unixTime), 0)
-	return datetime.Format("2006/01/02 03:04:05"), nil
+	nextActivityDate := GetNextActivityDate(dateTime)
+	return nextActivityDate.Format("2006/01/02 Mon"), nil
 }
 
 // textから改行を削除する
-func DistinctCRLF(text string) string {
+func RemoveNewLine(text string) string {
 	return strings.Replace(text, "\n", " ", -1)
 }
 
 // textから学籍番号を抽出する
-func TextToStudentID(text string) (string, error) {
+func ExtractStudentID(text string) (string, error) {
 	stripText := strings.Replace(text, "-", "", 10)
 	reg, err := regexp.Compile("[0-9]{11}")
 	if err != nil {
@@ -37,7 +56,7 @@ func TextToStudentID(text string) (string, error) {
 	}
 	studentID := string(reg.Find([]byte(stripText)))
 	if studentID == "" {
-		return "", errors.New("StudentID is not found in 「" + DistinctCRLF(text) + "」")
+		return "", errors.New("StudentID is not found in 「" + RemoveNewLine(text) + "」")
 	}
 	return studentID, nil
 }
@@ -54,18 +73,18 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	// 欠席連絡された日付と学籍を抽出して出力
-	for _, v := range history.Messages {
-		date, err := ParseTimestamp(v.Timestamp)
+	// 欠席する活動日と学籍番号を抽出して出力
+	for _, message := range history.Messages {
+		dateString, err := TimestampToDateString(message.Timestamp)
 		if err != nil {
-			fmt.Errorf(err.Error())
+			log.Println(err)
 			continue
 		}
-		studentID, err := TextToStudentID(v.Text)
+		studentID, err := ExtractStudentID(message.Text)
 		if err != nil {
-			fmt.Errorf(err.Error())
+			log.Println(err)
 			continue
 		}
-		fmt.Println(date, studentID)
+		fmt.Println(dateString, studentID)
 	}
 }
